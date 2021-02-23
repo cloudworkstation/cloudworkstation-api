@@ -1,0 +1,31 @@
+"""
+/instance/ { list of instances }
+  - search is based on tags (tagged by username)
+
+/instance/<id> { manage an instance e.g. create/start/stop/suspend/delete }
+  - create/delete trigger standalone fargate tasks to manage terraform to build/destroy instance
+  - start/stop/suspend uses EC2 APIs
+
+/entitlement { get a list of what can be created }
+
+/_refresh { system call, triggers reload of security data }
+
+config?
+ - group to role mapping
+ - role to entitlement mapping
+ - entitlement is a machine definition with a number allowed
+ - machine def is what gets launched
+
+(some roles are special e.g. 'admin' and 'console')
+(other roles manage mapping of entitlements to machine defs)
+
+| partition key | sort key |
+| group_map     | group name | {'role': 'role_name', role, role, etc}
+| role_map      | role       | {'entitlement': 'ent'}
+| entitlement   | entitlement | [{machine def, number}]
+| machine def   | def id | {ami, instance type, userdata script (b64)}
+| user_id       | desktop_id | {instance_id, created}
+
+will pre-load group map { can be reloaded with _refresh call }
+
+"""
