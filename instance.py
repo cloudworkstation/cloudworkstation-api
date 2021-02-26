@@ -48,7 +48,10 @@ def scan_for_instances_with_tags(tags):
   """
   Scan for instances with specific tags
   """
-  custom_filter = []
+  custom_filter = [{
+    "Name": "instance-state-name",
+    "Values": ["stopped", "running"]
+  }]
   for tag in tags:
     custom_filter.append({
       "Name":   "tag:{tag}".format(tag = tag["name"]),

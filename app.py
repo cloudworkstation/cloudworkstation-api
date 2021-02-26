@@ -3,8 +3,10 @@ import logging
 from flask import Flask, request, redirect
 from flask_cors import CORS
 
+from ecs import create_desktop_instance
 from groups import get_groups_and_roles
 from entitlements import get_entitlements_for_roles
+from machinedef import get_machine_def
 from instance import get_instances_by_username
 from security import secured
 from utils import success_json_response, check_for_keys, get_rand_string
@@ -41,7 +43,8 @@ def get_entitlements(username, roles):
 @error_handler
 @secured
 def get_instances(username, roles):
-  return success_json_response(get_instances_by_username(username))
+  instances = get_instances_by_username(username)
+  return success_json_response(instances)
 
 @app.route("/instance", methods=["POST"])
 @error_handler
@@ -69,8 +72,31 @@ def create_instance(username, roles):
       if selected_entitlement:
         if selected_entitlement["total_allowed_instances"] - selected_entitlement["current_instances"] > 0:
           # we can provision it
+          # get machine def
+          machine_def = get_machine_def(machine_def_id=selected_entitlement["machine_def_id"])
           desktop_id = get_rand_string(8)
-          
+          # if an override id was set then use it
+          if "desktop_id" in request.json:
+            desktop_id = request.json["desktop_id"]
+          # create task to provision
+          response = create_desktop_instance(
+            desktop_id=desktop_id,
+            ami_id=machine_def["ami_id"],
+            machine_username=username,
+            screen_geometry=request.json["screen_geometry"],
+            machine_def_id=selected_entitlement["machine_def_id"],
+            instance_type=machine_def["instance_type"],
+            user_data=machine_def["user_data"]
+          )
+          if response:
+            return success_json_response({
+              "desktop_id": desktop_id,
+              "status": "okay"
+            })
+          else:
+            return success_json_response({
+              "status": "error creating"
+            })
         else:
           raise ResourceNotFoundException("No available capacity to start this instance")
       else:
