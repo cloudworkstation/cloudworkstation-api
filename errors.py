@@ -17,6 +17,11 @@ class BadRequestException(Exception):
     def __init__(self, *args, **kwargs):
         Exception.__init__(self, *args, **kwargs)
 
+class NoAvailableCapacity(Exception):
+    """Error thrown for requests where there is not enough capacity to allow them"""
+    def __init__(self, *args, **kwargs):
+        Exception.__init__(self, *args, **kwargs)
+
 def error_handler(f):
     """
     Function to manage errors coming back to webservice calls
@@ -32,6 +37,8 @@ def error_handler(f):
           return exception_to_json_response(err, 404)
         except BadRequestException as err:
             return exception_to_json_response(err, 400)
+        except NoAvailableCapacity as err:
+            return exception_to_json_response(err, 429)
         #except Exception as err:
         #    logger.error(err, exc_info=True)
         #    return generic_exception_json_response(500)

@@ -8,7 +8,50 @@ logger = logging.getLogger(__name__)
 
 ec2 = boto3.client("ec2")
 
+def start_instance(instanceid, hibernate = False):
+  """
+  Start and EC2 instance
+  """
+  response = ec2.start_instances(
+    InstanceIds = [instanceid]
+  )
+  logging.info(f"Got response from EC2 api {response}")
+
+def stop_instance(instanceid, hibernate = False):
+  """
+  Stop an EC2 instance
+  """
+  response = ec2.stop_instances(
+    InstanceIds = [instanceid],
+    Hibernate = hibernate
+  )
+  logging.info(f"Got response from EC2 api {response}")
+
+def get_instances_by_username_and_id(username, instanceid):
+  """
+  Helper method to find an instance which belongs to a given user and which has a specific ID
+  """
+  instances = scan_for_instances_with_tags([
+    {
+      "name": "MachineType",
+      "value": "Desktop"
+    },
+    {
+      "name": "Username",
+      "value": username
+    },
+    {
+      "name": "DesktopId",
+      "value": instanceid
+    }
+  ])
+  return clean_up_instances(instances)
+
+
 def get_instances_by_username(username):
+  """
+  Helper method to search for instances belonging to a given user
+  """
   instances = scan_for_instances_with_tags([
     {
       "name": "MachineType",
@@ -19,6 +62,12 @@ def get_instances_by_username(username):
       "value": username
     }
   ])
+  return clean_up_instances(instances)
+
+def clean_up_instances(instances):
+  """
+  Cleans the instance raw data up to send back to client
+  """
   cleansed_instances = {}
   for instance in instances:
     cleansed_instances.update({
@@ -47,10 +96,11 @@ def tag_list_to_dict(tags):
 def scan_for_instances_with_tags(tags):
   """
   Scan for instances with specific tags
+  Does not return terminated instances
   """
   custom_filter = [{
     "Name": "instance-state-name",
-    "Values": ["stopped", "running"]
+    "Values": ["stopped", "running", "pending", "shutting-down", "stopping"]
   }]
   for tag in tags:
     custom_filter.append({
@@ -72,10 +122,3 @@ def scan_for_instances_with_tags(tags):
             "securitygroups": instance["SecurityGroups"]
           })
   return instances
-
-if __name__ == "__main__":
-  i = scan_for_instances_with_tags([{
-    "name": "aws:ec2launchtemplate:id",
-    "value": "lt-03873ae44981f4115"
-  }])
-  print(i)

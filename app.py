@@ -7,10 +7,10 @@ from ecs import create_desktop_instance, destroy_desktop_instance
 from groups import get_groups_and_roles
 from entitlements import get_entitlements_for_roles
 from machinedef import get_machine_def
-from instance import get_instances_by_username
+from instance import get_instances_by_username, get_instances_by_username_and_id, stop_instance, start_instance
 from security import secured
 from utils import success_json_response, check_for_keys, get_rand_string
-from errors import error_handler, ResourceNotFoundException, BadRequestException
+from errors import error_handler, ResourceNotFoundException, BadRequestException, NoAvailableCapacity
 
 # setup app
 app = Flask(__name__)
@@ -99,7 +99,7 @@ def create_instance(username, roles):
               "status": "error"
             })
         else:
-          raise ResourceNotFoundException("No available capacity to start this instance")
+          raise NoAvailableCapacity("No available capacity to start this instance")
       else:
         raise ResourceNotFoundException("No matching machine_def found")
   else:
@@ -109,9 +109,52 @@ def create_instance(username, roles):
 @error_handler
 @secured
 def get_instance(username, roles, instanceid):
-  instances = get_instances_by_username(username)
-  if instanceid in instances:
-    return success_json_response(instances[instanceid])
+  instance = get_instances_by_username_and_id(username=username, instanceid=instanceid)
+  logger.info(f"Got instance data {instance}")
+  if len(instance) > 0:
+    return success_json_response(instance[instanceid])
+  else:
+    raise ResourceNotFoundException(f"An instance with id '{instanceid}' was not found")
+
+@app.route("/instance/<instanceid>", methods=["PATCH"])
+@error_handler
+@secured
+def change_instance(username, roles, instanceid):
+  instance = get_instances_by_username_and_id(username=username, instanceid=instanceid)
+  logger.info(f"Got instance data {instance}")
+  if len(instance) > 0:
+    # check request is valid
+    if request.json:
+      missing = check_for_keys(
+        dict = request.json,
+        keys = ["state"]
+      )
+      if missing:
+        raise BadRequestException(f"The following keys are missing from the request: {missing}")
+      else:
+        if request.json["state"] not in ["stopped", "running"]:
+          raise BadRequestException("Invalid state request")
+        else:
+          if request.json["state"] == "stopped":
+            stop_instance(
+              instanceid = instance[instanceid]["instanceid"]
+            )
+            return success_json_response({
+              "desktop_id": instanceid,
+              "status": "okay",
+              "message": "stopping instance"
+            })
+          elif request.json["state"] == "running":
+            start_instance(
+              instanceid = instance[instanceid]["instanceid"]
+            )
+            return success_json_response({
+              "desktop_id": instanceid,
+              "status": "okay",
+              "message": "starting instance"
+            })
+    else:
+      raise BadRequestException("Request should be JSON")
   else:
     raise ResourceNotFoundException(f"An instance with id '{instanceid}' was not found")
 
@@ -119,7 +162,8 @@ def get_instance(username, roles, instanceid):
 @error_handler
 @secured
 def delete_instance(username, roles, instanceid):
-  instances = get_instances_by_username(username)
+  instances = get_instances_by_username_and_id(username=username, instanceid=instanceid)
+  logger.info(f"Got instance data {instances}")
   if instanceid in instances:
     # need to trigger delete
     instance = instances[instanceid]
