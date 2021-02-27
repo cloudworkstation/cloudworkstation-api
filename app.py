@@ -1,6 +1,5 @@
-import json
 import logging
-from flask import Flask, request, redirect
+from flask import Flask, request
 from flask_cors import CORS
 
 from ecs import create_desktop_instance, destroy_desktop_instance
