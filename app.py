@@ -3,7 +3,7 @@ import logging
 from flask import Flask, request, redirect
 from flask_cors import CORS
 
-from ecs import create_desktop_instance
+from ecs import create_desktop_instance, destroy_desktop_instance
 from groups import get_groups_and_roles
 from entitlements import get_entitlements_for_roles
 from machinedef import get_machine_def
@@ -91,11 +91,12 @@ def create_instance(username, roles):
           if response:
             return success_json_response({
               "desktop_id": desktop_id,
-              "status": "okay"
+              "status": "okay",
+              "message": "created task to create instance"
             })
           else:
             return success_json_response({
-              "status": "error creating"
+              "status": "error"
             })
         else:
           raise ResourceNotFoundException("No available capacity to start this instance")
@@ -111,6 +112,38 @@ def get_instance(username, roles, instanceid):
   instances = get_instances_by_username(username)
   if instanceid in instances:
     return success_json_response(instances[instanceid])
+  else:
+    raise ResourceNotFoundException(f"An instance with id '{instanceid}' was not found")
+
+@app.route("/instance/<instanceid>", methods=["DELETE"])
+@error_handler
+@secured
+def delete_instance(username, roles, instanceid):
+  instances = get_instances_by_username(username)
+  if instanceid in instances:
+    # need to trigger delete
+    instance = instances[instanceid]
+    machine_def = get_machine_def(machine_def_id=instance["machine_def_id"])
+    # create task to provision
+    response = destroy_desktop_instance(
+      desktop_id=instanceid,
+      ami_id=machine_def["ami_id"],
+      machine_username=username,
+      screen_geometry=instance["screengeometry"],
+      machine_def_id=instance["machine_def_id"],
+      instance_type=machine_def["instance_type"],
+      user_data=machine_def["user_data"]
+    )
+    if response:
+      return success_json_response({
+        "desktop_id": instanceid,
+        "status": "okay",
+        "message": "created task to remove instance"
+      })
+    else:
+      return success_json_response({
+        "status": "error"
+      })
   else:
     raise ResourceNotFoundException(f"An instance with id '{instanceid}' was not found")
 

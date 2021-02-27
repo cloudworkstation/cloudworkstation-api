@@ -13,6 +13,29 @@ SUBNETS = config("SUBNETS")
 ecs = boto3.client("ecs")
 logger = logging.getLogger(__name__)
 
+def destroy_desktop_instance(desktop_id, ami_id, machine_username, screen_geometry, machine_def_id, instance_type, user_data):
+  """
+  Create a task to destroy an instance
+  """
+  environment = {
+    "MODE": "destroy",
+    "DESKTOP_ID": desktop_id,
+    "AMI_ID": ami_id,
+    "MACHINE_USERNAME": machine_username,
+    "SCREEN_GEOMETRY": screen_geometry,
+    "MACHINE_DEF_ID": machine_def_id,
+    "INSTANCE_TYPE": instance_type,
+    "B64_USER_DATA": user_data,
+    "TF_LOG": "DEBUG"
+  }
+  return start_standalone_task(
+    task_arn = TASK_ARN,
+    cluster = CLUSTER_NAME,
+    subnets = SUBNETS.split(","),
+    security_group = SEC_GROUP_ID,
+    environment = environment
+  )
+
 def create_desktop_instance(desktop_id, ami_id, machine_username, screen_geometry, machine_def_id, instance_type, user_data):
   """
   Create a task to create an instance
@@ -25,8 +48,8 @@ def create_desktop_instance(desktop_id, ami_id, machine_username, screen_geometr
     "SCREEN_GEOMETRY": screen_geometry,
     "MACHINE_DEF_ID": machine_def_id,
     "INSTANCE_TYPE": instance_type,
-    "B64_USER_DATA": user_data#,
-    #"TF_LOG": "DEBUG"
+    "B64_USER_DATA": user_data,
+    "TF_LOG": "DEBUG"
   }
   return start_standalone_task(
     task_arn = TASK_ARN,
