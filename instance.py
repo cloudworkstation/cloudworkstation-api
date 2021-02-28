@@ -3,9 +3,11 @@ Code to deal with EC2 instances
 """
 import logging
 import boto3
+from decouple import config
+
+env_key = config("ENV_KEY")
 
 logger = logging.getLogger(__name__)
-
 ec2 = boto3.client("ec2")
 
 def start_instance(instanceid, hibernate = False):
@@ -43,6 +45,10 @@ def get_instances_by_username_and_id(username, instanceid):
     {
       "name": "DesktopId",
       "value": instanceid
+    },
+    {
+      "name": "EnvKey",
+      "value": env_key
     }
   ])
   return clean_up_instances(instances)
@@ -60,6 +66,10 @@ def get_instances_by_username(username):
     {
       "name": "Username",
       "value": username
+    },
+    {
+      "name": "EnvKey",
+      "value": env_key
     }
   ])
   return clean_up_instances(instances)
