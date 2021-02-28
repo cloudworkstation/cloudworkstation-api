@@ -25,8 +25,7 @@ def destroy_desktop_instance(desktop_id, ami_id, machine_username, screen_geomet
     "SCREEN_GEOMETRY": screen_geometry,
     "MACHINE_DEF_ID": machine_def_id,
     "INSTANCE_TYPE": instance_type,
-    "B64_USER_DATA": user_data,
-    "TF_LOG": "DEBUG"
+    "B64_USER_DATA": user_data
   }
   return start_standalone_task(
     task_arn = TASK_ARN,
@@ -48,8 +47,7 @@ def create_desktop_instance(desktop_id, ami_id, machine_username, screen_geometr
     "SCREEN_GEOMETRY": screen_geometry,
     "MACHINE_DEF_ID": machine_def_id,
     "INSTANCE_TYPE": instance_type,
-    "B64_USER_DATA": user_data,
-    "TF_LOG": "DEBUG"
+    "B64_USER_DATA": user_data
   }
   return start_standalone_task(
     task_arn = TASK_ARN,
