@@ -28,7 +28,7 @@ def secured(f):
       if "x-remote-user-groups" in request.headers:
         groups = request.headers["x-remote-user-groups"]
         logger.info(f"Groups from header: {groups}")
-        groups = groups.split(" ")
+        groups = groups.split(",")
         # map groups to roles
         roles = []
         for group in groups:
