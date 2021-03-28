@@ -8,6 +8,12 @@ from flask import make_response, jsonify
 
 logger = logging.getLogger(__name__)
 
+def format_sse(data: str, event=None) -> str:
+  msg = f'data: {data}\n\n'
+  if event is not None:
+    msg = f'event: {event}\n{msg}'
+  return msg
+
 def get_rand_string(number_of_characters):
     chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     rnd = random.SystemRandom()

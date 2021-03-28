@@ -132,3 +132,23 @@ def scan_for_instances_with_tags(tags):
             "securitygroups": instance["SecurityGroups"]
           })
   return instances
+
+def get_tags_for_instance(instance_id):
+  """
+  Get the tags for an instance
+  """
+  response = ec2.describe_instances(
+    InstanceIds=[instance_id]
+  )
+  if "Reservations" in response:
+    if "Instances" in response["Reservations"][0]:
+      if "Tags" in response["Reservations"][0]["Instances"][0]:
+        tags_dict = {}
+        for tag in response["Reservations"][0]["Instances"][0]["Tags"]:
+          tags_dict[tag["Key"]] = tag["Value"]
+        return tags_dict
+  return None
+
+if __name__ == "__main__":
+  tags = get_tags_for_instance("i-05844726f3e53c25b")
+  print(tags)

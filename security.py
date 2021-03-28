@@ -7,10 +7,32 @@ import logging
 from functools import wraps
 from flask import request, g
 
-from errors import BadRequestException
+from errors import BadRequestException, AccessDeniedException
 from groups import group_role_map
 
 logger = logging.getLogger(__name__)
+
+def admin_only(f):
+  """
+  Decorator which checks that the user has the 'admin' role
+  """
+  @wraps(f)
+  def decorated_function(*args, **kwargs):
+    """
+    Function to check headers are present and check their validity
+    """
+    if "roles" in kwargs:
+      if "admin" in kwargs["roles"]:
+        return f(*args, **kwargs)
+      else:
+        logger.info("User does not have admin role")
+        raise AccessDeniedException("Required role is not present")
+    else:
+      logger.info("Roles kwarg is missing")
+      raise BadRequestException("Could not find role information")
+  
+  return decorated_function
+
 
 def secured(f):
   """

@@ -1,15 +1,20 @@
 import logging
-from flask import Flask, request
+import atexit
+import boto3
+import json
+from flask import Flask, request, Response
 from flask_cors import CORS
+from decouple import config
 
 from ecs import create_desktop_instance, destroy_desktop_instance
 from groups import get_groups_and_roles
 from entitlements import get_entitlements_for_roles
 from machinedef import get_machine_def
 from instance import get_instances_by_username, get_instances_by_username_and_id, stop_instance, start_instance
-from security import secured
-from utils import success_json_response, check_for_keys, get_rand_string
+from security import secured, admin_only
+from utils import success_json_response, check_for_keys, get_rand_string, format_sse
 from errors import error_handler, ResourceNotFoundException, BadRequestException, NoAvailableCapacity
+from messageprocessor import MessageProcessor
 
 # setup app
 app = Flask(__name__)
@@ -22,6 +27,77 @@ logger = logging.getLogger(__name__)
 # pre-cache useful data
 get_groups_and_roles()
 
+# SQS on startup
+sqs = boto3.client("sqs")
+sns = boto3.client("sns")
+
+queue_policy = '''{
+  "Statement": [{
+    "Effect":"Allow",
+    "Principal": {
+      "Service": "sns.amazonaws.com"
+    },
+    "Action":"sqs:SendMessage",
+    "Resource":"{queue}",
+    "Condition":{
+      "ArnEquals":{
+        "{sns}"
+      }
+    }
+  }]
+}'''
+
+queue_rand = get_rand_string(8)
+queue = sqs.create_queue(
+  QueueName=f"ec2_{queue_rand}",
+  Attributes={
+    "KmsMasterKeyId": config("KMS_KEY_ID")
+  }
+)
+queue_attr = sqs.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
+queue_policy = {
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "sns.amazonaws.com"
+      },
+      "Action": "sqs:SendMessage",
+      "Resource": queue_attr["Attributes"]["QueueArn"],
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": config("EC2_SNS_TOPIC")
+        }
+      }
+    }
+  ]
+}
+sqs.set_queue_attributes(
+  QueueUrl=queue["QueueUrl"],
+  Attributes={
+    "Policy": json.dumps(queue_policy)
+  }
+)
+sns_sub = sns.subscribe(
+  TopicArn=config("EC2_SNS_TOPIC"),
+  Protocol="SQS",
+  Endpoint=queue_attr["Attributes"]["QueueArn"]
+)
+# create thread for message processing
+messageproc = MessageProcessor(queueurl=queue["QueueUrl"])
+messageproc.start()
+
+# SQS cleanup at exit
+def cleanup_sqs():
+  """
+  Removes queue and subscription that was created
+  """
+  logger.info("Deleting SQS queue and subscription")
+  messageproc.join(timeout=5)
+  sns.unsubscribe(SubscriptionArn=sns_sub["SubscriptionArn"])
+  sqs.delete_queue(QueueUrl = queue["QueueUrl"])
+atexit.register(cleanup_sqs)
+
 @app.route("/", methods=["GET"])
 @error_handler
 @secured
@@ -30,6 +106,28 @@ def root(username, roles):
     "status": "okay",
     "username": username,
     "roles": roles
+  })
+
+@app.route("/event", methods=["GET"])
+@error_handler
+@secured
+def listen(username, roles):
+  def stream():
+    q = messageproc.listen(username=username)
+    while True:
+      message = q.get()
+      logger.info(f"Event for {username} : {message}")
+      yield format_sse(message, "message")
+  return Response(stream(), mimetype="text/event-stream")
+
+@app.route("/_refresh", methods=["GET"])
+@error_handler
+@secured
+@admin_only
+def refresh_config(username, roles):
+  get_groups_and_roles()
+  return success_json_response({
+    "status": "okay"
   })
 
 @app.route("/entitlement", methods=["GET"])
@@ -191,4 +289,4 @@ def delete_instance(username, roles, instanceid):
     raise ResourceNotFoundException(f"An instance with id '{instanceid}' was not found")
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    app.run(debug=True, host="0.0.0.0", port=5001)
