@@ -22,33 +22,10 @@ app = Flask(__name__)
 CORS(app)
 
 # set logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] (%(threadName)-10s) %(message)s')
 logger = logging.getLogger(__name__)
 
 # pre-cache useful data
 get_groups_and_roles()
-
-# SQS on startup
-sqs = SqsHandler(
-  topic_name = config("EC2_SNS_TOPIC"),
-  kms_id=config("KMS_KEY_ID")
-)
-sqs_queue_url = sqs.create_queue_and_subscribe()
-
-# create thread for message processing
-messageproc = MessageProcessor(
-  queueurl=sqs_queue_url
-)
-messageproc.start()
-
-# SQS cleanup at exit
-def cleanup_sqs():
-  """
-  Removes queue and subscription that was created
-  """
-  messageproc.join(timeout=5)
-  sqs.unsubscribe_and_delete_queue()
-atexit.register(cleanup_sqs)
 
 @app.route("/", methods=["GET"])
 @error_handler

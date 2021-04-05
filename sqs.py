@@ -65,7 +65,7 @@ class SqsHandler(object):
       }
     )
     queue_attr = sqs.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
-    queue_policy = get_queue_policy(
+    queue_policy = SqsHandler._get_queue_policy(
       queue_arn = queue_attr["Attributes"]["QueueArn"],
       topic_name = self.topic_name
     )

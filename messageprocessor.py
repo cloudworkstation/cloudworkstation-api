@@ -5,26 +5,30 @@ Code which processes messages on SQS topic and sends notifications to client
 import json
 import boto3
 import logging
-import threading
 import queue
 from collections import defaultdict
+
+from gevent.queue import Queue
+from gevent.event import Event
+from gevent.lock import BoundedSemaphore
 
 from instance import get_tags_for_instance
 
 logger = logging.getLogger(__name__)
 sqs = boto3.client("sqs")
+lock = BoundedSemaphore(1)
+message_processor = None
 
-class MessageProcessor(threading.Thread):
+class MessageProcessor():
   def __init__(self, queueurl):
-    super(MessageProcessor, self).__init__()
     self.queues = defaultdict(list)
     self.tag_cache = {}
     self.queueurl = queueurl
-    self.stoprequest = threading.Event()
+    self.stoprequest = Event()
   
   def listen(self, username):
     logger.info(f"Adding queue for {username}")
-    q = queue.Queue(maxsize=5)
+    q = Queue(maxsize=5)
     self.queues[username].append(q)
     return q
 
@@ -79,6 +83,18 @@ class MessageProcessor(threading.Thread):
         logger.info("Got no messages during long poll")
   
   def join(self, timeout=None):
+    logger.info("Joining to stop sqs rx...")
     self.stoprequest.set()
-    super(MessageProcessor, self).join(timeout)
   
+def get_processor(queueurl):
+  global message_processor
+  with lock:
+    if message_processor:
+      logger.info("Returning existing backend instance")
+      return message_processor
+    else:
+      logger.info("Creating new backend instance")
+      message_processor = MessageProcessor(
+        queueurl=queueurl
+      )
+      return message_processor
