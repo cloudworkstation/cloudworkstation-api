@@ -14,6 +14,7 @@ from instance import get_instances_by_username, get_instances_by_username_and_id
 from security import secured, admin_only
 from utils import success_json_response, check_for_keys, get_rand_string, format_sse
 from errors import error_handler, ResourceNotFoundException, BadRequestException, NoAvailableCapacity
+from sqs import SqsHandler
 from messageprocessor import MessageProcessor
 
 # setup app
@@ -28,63 +29,16 @@ logger = logging.getLogger(__name__)
 get_groups_and_roles()
 
 # SQS on startup
-sqs = boto3.client("sqs")
-sns = boto3.client("sns")
+sqs = SqsHandler(
+  topic_name = config("EC2_SNS_TOPIC"),
+  kms_id=config("KMS_KEY_ID")
+)
+sqs_queue_url = sqs.create_queue_and_subscribe()
 
-queue_policy = '''{
-  "Statement": [{
-    "Effect":"Allow",
-    "Principal": {
-      "Service": "sns.amazonaws.com"
-    },
-    "Action":"sqs:SendMessage",
-    "Resource":"{queue}",
-    "Condition":{
-      "ArnEquals":{
-        "{sns}"
-      }
-    }
-  }]
-}'''
-
-queue_rand = get_rand_string(8)
-queue = sqs.create_queue(
-  QueueName=f"ec2_{queue_rand}",
-  Attributes={
-    "KmsMasterKeyId": config("KMS_KEY_ID")
-  }
-)
-queue_attr = sqs.get_queue_attributes(QueueUrl=queue["QueueUrl"], AttributeNames=["QueueArn"])
-queue_policy = {
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "sns.amazonaws.com"
-      },
-      "Action": "sqs:SendMessage",
-      "Resource": queue_attr["Attributes"]["QueueArn"],
-      "Condition": {
-        "ArnEquals": {
-          "aws:SourceArn": config("EC2_SNS_TOPIC")
-        }
-      }
-    }
-  ]
-}
-sqs.set_queue_attributes(
-  QueueUrl=queue["QueueUrl"],
-  Attributes={
-    "Policy": json.dumps(queue_policy)
-  }
-)
-sns_sub = sns.subscribe(
-  TopicArn=config("EC2_SNS_TOPIC"),
-  Protocol="SQS",
-  Endpoint=queue_attr["Attributes"]["QueueArn"]
-)
 # create thread for message processing
-messageproc = MessageProcessor(queueurl=queue["QueueUrl"])
+messageproc = MessageProcessor(
+  queueurl=sqs_queue_url
+)
 messageproc.start()
 
 # SQS cleanup at exit
@@ -92,10 +46,8 @@ def cleanup_sqs():
   """
   Removes queue and subscription that was created
   """
-  logger.info("Deleting SQS queue and subscription")
   messageproc.join(timeout=5)
-  sns.unsubscribe(SubscriptionArn=sns_sub["SubscriptionArn"])
-  sqs.delete_queue(QueueUrl = queue["QueueUrl"])
+  sqs.unsubscribe_and_delete_queue()
 atexit.register(cleanup_sqs)
 
 @app.route("/", methods=["GET"])
