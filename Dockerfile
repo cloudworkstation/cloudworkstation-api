@@ -7,5 +7,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py ./
 
-# run gunicorn
-CMD [ "gunicorn", "--bind", "0.0.0.0:5000", "--forwarded-allow-ips=\"*\"", "app:app"]
+# run app
+CMD [ "python", "wrapper.py" ]

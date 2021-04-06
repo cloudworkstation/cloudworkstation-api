@@ -20,11 +20,13 @@ lock = BoundedSemaphore(1)
 message_processor = None
 
 class MessageProcessor():
+
+  stoprequest = Event()
+
   def __init__(self, queueurl):
     self.queues = defaultdict(list)
     self.tag_cache = {}
     self.queueurl = queueurl
-    self.stoprequest = Event()
   
   def listen(self, username):
     logger.info(f"Adding queue for {username}")
@@ -81,20 +83,20 @@ class MessageProcessor():
           )
       else:
         logger.info("Got no messages during long poll")
+    logger.info("Exiting from run because stoprequest is set")
   
-  def join(self, timeout=None):
-    logger.info("Joining to stop sqs rx...")
-    self.stoprequest.set()
-  
-def get_processor(queueurl):
+def get_processor(queueurl=None):
   global message_processor
   with lock:
     if message_processor:
       logger.info("Returning existing backend instance")
       return message_processor
     else:
-      logger.info("Creating new backend instance")
-      message_processor = MessageProcessor(
-        queueurl=queueurl
-      )
-      return message_processor
+      if queueurl:
+        logger.info("Creating new backend instance")
+        message_processor = MessageProcessor(
+          queueurl=queueurl
+        )
+        return message_processor
+      else:
+        logger.info("Could not create instance as missing queueurl parameter")
