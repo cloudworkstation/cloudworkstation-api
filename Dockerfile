@@ -1,4 +1,6 @@
-FROM python:3.8-alpine
+FROM python:3.7-alpine
+
+RUN apk --update --no-cache add python3-dev libffi-dev gcc musl-dev make libevent-dev build-base
 
 WORKDIR /usr/src/app
 
