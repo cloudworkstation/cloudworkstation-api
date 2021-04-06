@@ -14,41 +14,17 @@ from instance import get_instances_by_username, get_instances_by_username_and_id
 from security import secured, admin_only
 from utils import success_json_response, check_for_keys, get_rand_string, format_sse
 from errors import error_handler, ResourceNotFoundException, BadRequestException, NoAvailableCapacity
-from sqs import SqsHandler
-from messageprocessor import MessageProcessor
+from messageprocessor import get_processor
 
 # setup app
 app = Flask(__name__)
 CORS(app)
 
 # set logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] (%(threadName)-10s) %(message)s')
 logger = logging.getLogger(__name__)
 
 # pre-cache useful data
 get_groups_and_roles()
-
-# SQS on startup
-sqs = SqsHandler(
-  topic_name = config("EC2_SNS_TOPIC"),
-  kms_id=config("KMS_KEY_ID")
-)
-sqs_queue_url = sqs.create_queue_and_subscribe()
-
-# create thread for message processing
-messageproc = MessageProcessor(
-  queueurl=sqs_queue_url
-)
-messageproc.start()
-
-# SQS cleanup at exit
-def cleanup_sqs():
-  """
-  Removes queue and subscription that was created
-  """
-  messageproc.join(timeout=5)
-  sqs.unsubscribe_and_delete_queue()
-atexit.register(cleanup_sqs)
 
 @app.route("/", methods=["GET"])
 @error_handler
@@ -65,7 +41,7 @@ def root(username, roles):
 @secured
 def listen(username, roles):
   def stream():
-    q = messageproc.listen(username=username)
+    q = get_processor().listen(username=username)
     while True:
       message = q.get()
       logger.info(f"Event for {username} : {message}")
@@ -239,6 +215,3 @@ def delete_instance(username, roles, instanceid):
       })
   else:
     raise ResourceNotFoundException(f"An instance with id '{instanceid}' was not found")
-
-if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5001)
