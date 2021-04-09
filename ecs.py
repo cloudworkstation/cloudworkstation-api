@@ -13,6 +13,12 @@ SUBNETS = config("SUBNETS")
 ecs = boto3.client("ecs")
 logger = logging.getLogger(__name__)
 
+def scale_service_to_zero(service):
+  """
+  Scale down a service to 0 instances
+  """
+  
+
 def destroy_desktop_instance(desktop_id, ami_id, machine_username, screen_geometry, machine_def_id, instance_type, user_data):
   """
   Create a task to destroy an instance

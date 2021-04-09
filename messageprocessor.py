@@ -63,20 +63,23 @@ class MessageProcessor():
               if new_tags:
                 logger.info(f"Storing tags in cache for instance {instance_id}")
                 self.tag_cache[instance_id] = new_tags
-            username = self.tag_cache[instance_id]["Username"]
-            desktop_id = self.tag_cache[instance_id]["DesktopId"]
-            logger.info(f"Instance {instance_id} username {username} desktop_id {desktop_id}")
-            if username in self.queues:
-              logger.info(f"User {username} as event listener registered...")
-              for i in reversed(range(len(self.queues[username]))):
-                try:
-                  self.queues[username][i].put_nowait(json.dumps({
-                    "desktop_id": desktop_id,
-                    "state": state,
-                    "instance_id": instance_id
-                  }))
-                except queue.Full:
-                  del self.queues[username][i]
+            if "Username" in self.tag_cache[instance_id] and "DesktopId" in self.tag_cache[instance_id]:
+              username = self.tag_cache[instance_id]["Username"]
+              desktop_id = self.tag_cache[instance_id]["DesktopId"]
+              logger.info(f"Instance {instance_id} username {username} desktop_id {desktop_id}")
+              if username in self.queues:
+                logger.info(f"User {username} as event listener registered...")
+                for i in reversed(range(len(self.queues[username]))):
+                  try:
+                    self.queues[username][i].put_nowait(json.dumps({
+                      "desktop_id": desktop_id,
+                      "state": state,
+                      "instance_id": instance_id
+                    }))
+                  except queue.Full:
+                    del self.queues[username][i]
+            else:
+              logger.info(f"Instance {instance_id} does not have the Username or DesktopId tag, therefore discarding message.")
           sqs.delete_message(
             QueueUrl=self.queueurl,
             ReceiptHandle=recphwnd
